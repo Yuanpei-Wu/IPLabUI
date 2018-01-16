@@ -491,7 +491,7 @@
 
 
         if(isValidIP(marip)) {
-          socket = io.connect("http://"+marip+":80");
+          socket = io.connect("http://"+marip+":8081");
 
           setTimeout(function(){
             console.log(socket.connected);
