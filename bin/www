@@ -59,8 +59,10 @@ client.connect();
        // var k=parseInt(result[0]['ifname'].substr(-1));
        // MonitorData[item]={'ifUpdated':false,'id':parseInt(result[0]['id']),'time':result[0]['time'],'ratesend':parseInt(result[0]['ratesend']),
         //  'raterecv':parseInt(result[0]['raterecv']),'RSRP':parseInt(result[0]['RSRP']),'rtt':parseInt(result[0]['realrtt']),'lossrate':parseInt(result[0]['lossrate'])};
+	if(result.length>0){
         PPPLinkData[item]=result[0];
         PPPLinkData[item]['ifUpdated']=false;
+	}
       }
     });
 	//console.log(item);
@@ -163,6 +165,7 @@ function monitorUpdate(){
         console.log(error);
       }
       else{
+	if(result.length>0){
 		var ppp=result[0]['ifname'];
 	//	console.log(PPPLinkData[ppp]['id']);
         if(parseInt(result[0]['id'])!=PPPLinkData[ppp]['id']){
@@ -172,6 +175,7 @@ function monitorUpdate(){
           PPPLinkData[ppp]['ifUpdated']=false;
 
         }
+	}
       }
     });
 	//console.log(ppp);
@@ -620,6 +624,7 @@ io.on('connection', function (socket) {
           console.log(error);
         }
         else{
+	if(result.length>0){
 		 var ppp=result[0]['ifname'];
           table_init[ppp]=result;
           count++;
@@ -630,7 +635,7 @@ io.on('connection', function (socket) {
 			//console.log(table_init['ppp5'][0]['ifname']);
             socket.emit('getTableLinkInit',table_init);
           }
-		
+	}	
         }
       });
     }
