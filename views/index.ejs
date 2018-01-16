@@ -1,0 +1,1197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" >
+  <script src="/javascripts/jquery-2.2.4.js"></script>
+  <script src="/javascripts/socket.io.js"></script>
+  <script src="/javascripts/highcharts.js"></script>
+  <script src="/javascripts/highcharts-more.js"></script>
+  <script src="/javascripts/layer.js"></script>
+  <script src="/javascripts/jquery.dataTables.js"></script>
+  <script src="/javascripts/bootstrap.js"></script>
+  <script src="/javascripts/app.js"></script>
+  <script src="/javascripts/bootstrap-switch.js"></script>
+  <script src="/javascripts/socketEvent.js"></script>
+
+  <link rel="stylesheet" type="text/css" href="/stylesheets/bootstrap.css"/>
+  <!--<link rel="stylesheet" type="text/css" href="../public/css/docs.min.css"/>-->
+  <link rel="stylesheet" type="text/css" href="/stylesheets/jquery.dataTables.min.css"/>
+  <link rel="stylesheet" type="text/css" href="/stylesheets/table.css"/>
+  <link rel="stylesheet" type="text/css" href="/stylesheets/AdminLTE.css"/>
+  <link rel="stylesheet" type="text/css" href="/stylesheets/skin-blue.css"/>
+  <link rel="stylesheet" type="text/css" href="/stylesheets/bootstrap-switch.css"/>
+
+  <script ID="clientEventHandlersJS" LANGUAGE="javascript">
+
+    function merip_T1_onkeyup() {
+      if(document.merip.T1.value.length==3){
+        document.merip.T2.focus();
+      }
+    }
+    function merip_T2_onkeyup() {
+      if(document.merip.T2.value.length==3){
+        document.merip.T3.focus();
+      }
+    }
+    function merip_T3_onkeyup() {
+      if(document.merip.T3.value.length==3){
+        document.merip.T4.focus();
+      }
+    }
+
+    function isValidIP(ip)
+    {
+      var reg =  /^(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$/
+      return reg.test(ip);
+    }
+
+
+  </script>
+  <script>
+
+    $(function(){
+      var socket={};//此处需要申明一个全局对象，否则页面事件执行出错
+      var marip=[];//重启后需要用到此全局变量
+      var mer_ip=[];
+      var count=0;//用于判断曲线图是否移动
+      var pppNum=3;//网卡数量，实际中需改动
+      var init_dyna_field_en=['mode','remoteHost'];
+      var init_dyna_field_ch=['模式','远程主机'];
+      var  ppp_link_field_en=['id','ifname','time','status','RSRP','lossrate','raterecv','ratesend','PSRAT'];
+      var ppp_link_field_ch=[];
+      var schedule_data_field_en=['link_section','MAX_PKTLOSSRATE','MAX_RTT','MIN_RSSI','MIN_RSRP','MIN_RSRQ','MIN_SINR','MIN_SNR','SLA','manual_sendpercent','sendpercent'];
+      var schedule_data_filed_ch=['调度策略','最大丢包率','最小接收信号强度','服务等级','手动发送比例'];
+
+      //pppObject makes this version commmon.Change it if needed
+      var pppObject={'ppp0':'电信','ppp2':'联通','ppp4':'移动'};
+
+      var WinH=window.innerHeight;
+      var WinW=window.innerWidth;
+      $('#container0').height(window.innerHeight*0.45);
+      $('#container1').height(window.innerHeight*0.45);
+      $('#container2').height(window.innerHeight*0.45);
+      $('#container3').height(window.innerHeight*0.45);
+      $('#container4').height(window.innerHeight*0.45);
+
+      //获得marip
+      marip=location.hostname;
+      console.log(marip);
+
+      //判断操作系统是否为Linux
+      var isLinux=false;
+      var platform=navigator.platform;
+      //console.log(platform);
+      if(platform.toString().indexOf('Linux')>-1) isLinux=true;
+
+
+      /**********************highcharts初始化***************************/
+      $('#container0').highcharts({
+        chart: {
+          type: 'line',
+          animation:false
+        },
+        title: {
+          text: '发送速率'
+        },
+        credits : {
+          enabled:false
+        },
+        xAxis: {
+          type:'datetime'
+        },
+        yAxis: {
+          title:{
+            text:'bps'
+          }
+        }
+      });
+
+      $('#container1').highcharts({
+        chart: {
+          type: 'line',
+          animation:false
+        },
+        title: {
+          text: '接收速率'
+        },
+        credits : {
+          enabled:false
+        },
+        xAxis: {
+          type:'datetime'
+        },
+        yAxis: {
+          title:{
+            text:'bps'
+          }
+        }
+      });
+
+      $('#container2').highcharts({
+        chart: {
+          type: 'line',
+          animation:false
+        },
+        title: {
+          text: 'RSRP'
+        },
+        credits : {
+          enabled:false
+        },
+        xAxis: {
+          type:'datetime'
+        },
+        yAxis: {
+          title:{
+            text:''
+          }
+        }
+      });
+
+      $('#container3').highcharts({
+        chart: {
+          type: 'line',
+          animation:false
+        },
+        title: {
+          text: 'RTT'
+        },
+        credits : {
+          enabled:false
+        },
+        xAxis: {
+          type:'datetime'
+        },
+        yAxis: {
+          title:{
+            text:''
+          }
+        }
+      });
+
+      $('#container4').highcharts({
+        chart: {
+          type: 'line',
+          animation:false
+        },
+        title: {
+          text: '丢包率'
+        },
+        credits : {
+          enabled:false
+        },
+        xAxis: {
+          type:'datetime'
+        },
+        yAxis: {
+          title:{
+            text:''
+          }
+        }
+
+      });
+      for(var ppp in pppObject){
+        $('#container0').highcharts().addSeries({
+          id:ppp,
+          name:pppObject[ppp]
+        });
+        $('#container1').highcharts().addSeries({
+          id:ppp,
+          name:pppObject[ppp]
+        });
+        $('#container2').highcharts().addSeries({
+          id:ppp,
+          name:pppObject[ppp]
+        });
+        $('#container3').highcharts().addSeries({
+          id:ppp,
+          name:pppObject[ppp]
+        });
+        $('#container4').highcharts().addSeries({
+          id:ppp,
+          name:pppObject[ppp]
+        });
+      }
+    $('#container0').highcharts().addSeries({
+      id:'sendAll',
+      name:'总速率'
+    });
+    $('#container1').highcharts().addSeries({
+      id:'recvAll',
+      name:'总速率'
+    });
+
+      //dataTable初始化
+      var table_init_dyna=$('#init_dyna_table').DataTable({
+        "ordering":false,
+        "paging":false,
+        "searching":false,
+        "info":false
+      });
+      var tableLink=[];
+      for(var ppp in pppObject){
+        var pppNum=ppp.substr(-1);
+        tableLink[pppNum]=$('#pppLink'+pppNum).DataTable({
+          "ordering":false,
+          "paging":false,
+          "searching":false,
+          "info":false
+        });
+      }
+      var table_schedule_data=$('#schedule_data_table').DataTable({
+        "ordering":false,
+        "paging":false,
+        "searching":false,
+        "info":false
+      });
+      for (var i=0;i<schedule_data_field_en.length ;i++ )
+      {
+
+        table_schedule_data.row.add([schedule_data_field_en[i],0]).draw();
+      }
+      //switch初始化
+      $('#dynSwitch input').each(function(){
+        $(this).bootstrapSwitch({
+          onText:'已开启',
+          offText:'未开启',
+          readonly:true
+        });
+      });
+      $('#scheduleSwitch input').each(function(){
+        $(this).bootstrapSwitch({
+          onText:'已开启',
+          offText:'未开启',
+          readonly:true
+        });
+      });
+      $('#tunnelSwitch input').each(function(){
+        $(this).bootstrapSwitch({
+          onText:'已开启',
+          offText:'未开启',
+          readonly:true
+        });
+      });
+      for(var item in pppObject){
+        $('#'+item+'Switch input').bootstrapSwitch({
+          onText:'运行中',
+          offText:'未运行',
+          size:'small',
+          readonly:true
+
+        });
+      }
+
+      //gauge初始化
+      $('#cpuGauge').highcharts({
+        chart:{
+          type:'gauge'
+        },
+        title:{
+          text:'CPU占用率'
+        },
+        pane: [{
+          startAngle: -150,
+          endAngle: 150,
+          size: WinW*0.12
+
+        }],
+        tooltip: {
+          enabled: false
+        },
+
+        yAxis: [{
+          min: 0,
+          max: 100,
+          title: {
+            text: '%'
+
+          }
+        }],
+
+        plotOptions: {
+          gauge: {
+            dataLabels: {
+              enabled: false
+            },
+            dial: {
+              radius: '100%',
+              backgroundColor:'silver',
+              borderColor:'black'
+            }
+          }
+        },
+        series:[{
+          data:[0],
+          tooltip:{
+            valueSuffix:' %'
+          }
+        }]
+      });
+      $('#memoryGauge').highcharts({
+        chart:{
+          type:'gauge'
+        },
+        title:{
+          text:'内存占用率'
+        },
+        pane: [{
+          startAngle: -150,
+          endAngle: 150,
+          size: WinW*0.12
+        }],
+        tooltip: {
+          enabled: false
+        },
+
+        yAxis: [{
+          min: 0,
+          max: 100,
+          title: {
+            text: '%',
+            y: 0
+          }
+        }],
+
+        plotOptions: {
+          gauge: {
+            dataLabels: {
+              enabled: false
+            },
+            dial: {
+              radius: '100%',
+              backgroundColor:'silver',
+              borderColor:'black'
+            }
+          }
+        },
+        series:[{
+          data:[0]
+        }]
+      });
+      $('#bootGauge').highcharts({
+        chart:{
+          type:'gauge'
+        },
+        title:{
+          text:'boot占用率'
+        },
+        pane: [{
+          startAngle: -150,
+          endAngle: 150,
+          size: WinW*0.12
+        }],
+        tooltip: {
+          enabled: false
+        },
+
+        yAxis: [{
+          min: 0,
+          max: 100,
+          title: {
+            text: '%',
+            y: 0
+          }
+        }],
+
+        plotOptions: {
+          gauge: {
+            dataLabels: {
+              enabled: false
+            },
+            dial: {
+              radius: '100%',
+              backgroundColor:'silver',
+              borderColor:'black'
+            }
+          }
+        },
+        series:[{
+          data:[0]
+        }]
+      });
+      $('#rootGauge').highcharts({
+        chart:{
+          type:'gauge'
+        },
+        title:{
+          text:'root占用率'
+        },
+        pane: [{
+          startAngle: -150,
+          endAngle: 150,
+          size: WinW*0.12
+        }],
+        tooltip: {
+          enabled: false
+        },
+
+        yAxis: [{
+          min: 0,
+          max: 100,
+          title: {
+            text: '%',
+            y: 0
+          }
+        }],
+
+        plotOptions: {
+          gauge: {
+            dataLabels: {
+              enabled: false
+            },
+            dial: {
+              radius: '100%',
+              backgroundColor:'silver',
+              borderColor:'black'
+            }
+          }
+        },
+        series:[{
+          data:[0]
+        }]
+      });
+
+      //侧边栏效果
+      $('.sidebar ul li').click(function(e){
+        $('.sidebar ul li').removeClass('active');
+        $(this).addClass('active');
+      });
+      //固定标题
+      //$('.main-header').stickUp();
+      //$('.navbar-static-top').stickUp();
+
+
+      function checkRebootSuc(){
+        socket = io.connect("http://"+marip+":8081",{'force new connection':true});
+        setTimeout(function(){
+          //console.log(socket);
+          if(socket.connected){
+            layer.closeAll();
+            layer.alert('重启成功!');
+            socketEvent(socket);
+            socket.emit('storeClientInfo', { customId:"Manager" });
+            //socket.emit('reqScheduleData');
+            //socket.emit('ppp_link_init');
+            socket.emit('ppp_link_update');
+            socket.emit('reqMonitor');
+            socket.emit('reqSysStatus');
+            socket.emit('reqDiskStatus');
+	    socket.emit("reqWifi");
+            console.log('link success');
+          }else{
+            socket.destroy();
+            setTimeout(function(){
+              checkRebootSuc();
+            },2000);
+          }
+        },500);
+
+      }
+
+
+
+        if(isValidIP(marip)) {
+          socket = io.connect("http://"+marip+":80");
+
+          setTimeout(function(){
+            console.log(socket.connected);
+            if(socket.connected) {
+              //layer.alert('连接成功！');
+              socket.emit('storeClientInfo', { customId:"Manager" });
+              socket.emit('reqScheduleData');
+              socket.emit('ppp_link_init');
+              setTimeout(function(){
+                socket.emit('ppp_link_update');
+              },3000);
+
+
+              socket.emit('reqMonitor');
+              //socket.emit('reqInitDyna');
+              socket.emit('reqSysStatus');
+              socket.emit('reqDiskStatus');
+	      socket.emit('reqWifi');
+              socketEvent(socket);
+            }
+            else layer.alert("Socket连接失败！")
+
+          },500);
+        }
+     
+
+	/**************************************************************socket事件********************************************************/
+	function socketEvent(socket){
+	    //初始化ppp_link
+	    socket.on('getTableLinkInit',function(data){
+		//必须先清空表格，否则点击两次连接会出错
+		for(var item in  data){
+           	    var num=parseInt(item.substr(-1));
+		    tableLink[num].row($('#pppLink'+num+' tbody tr')).remove();
+		    var obj =data[item];
+		   if(obj.length==5){ 
+		    for(var x=4;x>-1;x--){
+			var para=obj[x];
+			tableLink[num].row.add([para.id,para.ifname,para.status,para.RSRP,para.raterecv,para.ratesend,para.PSRAT]).draw();
+			//console.log(para.id);
+		    }
+		   }
+		}
+	    });
+	    //更新pppLink表格
+	    socket.on('PPPLinkUpdate',function(data){
+		for(var item in data){
+		    var obj=data[item];
+		    var i=parseInt(item.substr(-1));
+		    if(obj['ifUpdated']){
+			tableLink[i].row($("#pppLink"+i+" tbody").children(":first")).remove();
+			tableLink[i].row.add([obj.id,obj.ifname,obj.status,obj.RSRP,obj.raterecv,obj.ratesend,obj.PSRAT]).draw();
+		    }
+		}
+		setTimeout(function(){
+		    socket.emit('ppp_link_update');
+		},3000);
+	    });
+
+	    //更新收发速率
+	    socket.on('getMonitor',function(data){
+		//var ifUpdated=false;
+		var sendAll=0,recvAll=0;
+		var transtime=new Date().getTime()+28800000;
+		for(var item in data){
+		    var obj=data[item];
+		    if(obj['ifUpdated']){
+			//ifUpdated=true;
+			//transtime=translate(obj['time']);
+			sendAll+=obj.ratesend;
+			recvAll+=obj.raterecv;
+			if(count<20){
+			    $('#container0').highcharts().get(item).addPoint([transtime,obj.ratesend],false,false,false);//redraw,shift,animation
+			    $('#container1').highcharts().get(item).addPoint([transtime,obj.raterecv],false,false,false);
+			    $('#container2').highcharts().get(item).addPoint([transtime,obj.RSRP],true,false,false);
+			    $('#container3').highcharts().get(item).addPoint([transtime,obj.realrtt],true,false,false);
+			    $('#container4').highcharts().get(item).addPoint([transtime,obj.lossrate],true,false,false);
+			}else{
+			    $('#container0').highcharts().get(item).addPoint([transtime,obj.ratesend],false,true,false);
+			    $('#container1').highcharts().get(item).addPoint([transtime,obj.raterecv],false,true,false);
+			    $('#container2').highcharts().get(item).addPoint([transtime,obj.RSRP],true,true,false);
+			    $('#container3').highcharts().get(item).addPoint([transtime,obj.realrtt],true,true,false);
+			    $('#container4').highcharts().get(item).addPoint([transtime,obj.lossrate],true,true,false);
+			}
+
+		    }else{
+			if(count<20){
+			    $('#container0').highcharts().get(item).addPoint([transtime,0],false,false,false);//redraw,shift,animation
+			    $('#container1').highcharts().get(item).addPoint([transtime,0],false,false,false);
+			    $('#container2').highcharts().get(item).addPoint([transtime,-120],true,false,false);
+			    $('#container3').highcharts().get(item).addPoint([transtime,0],true,false,false);
+			    $('#container4').highcharts().get(item).addPoint([transtime,100],true,false,false);
+			}else{
+			    $('#container0').highcharts().get(item).addPoint([transtime,0],false,true,false);
+			    $('#container1').highcharts().get(item).addPoint([transtime,0],false,true,false);
+			    $('#container2').highcharts().get(item).addPoint([transtime,-120],true,true,false);
+			    $('#container3').highcharts().get(item).addPoint([transtime,0],true,true,false);
+			    $('#container4').highcharts().get(item).addPoint([transtime,100],true,true,false);
+			}
+		    }
+
+		}
+
+		if(count<20){
+		    $('#container0').highcharts().get('sendAll').addPoint([transtime,sendAll],true,false,false);
+		    $('#container1').highcharts().get('recvAll').addPoint([transtime,recvAll],true,false,false);
+		}else{
+		    $('#container0').highcharts().get('sendAll').addPoint([transtime,sendAll],true,true,false);
+		    $('#container1').highcharts().get('recvAll').addPoint([transtime,recvAll],true,true,false);
+		}
+		count++;
+		if(count>30) count--;
+
+
+		setTimeout(function(){
+		    socket.emit("reqMonitor");
+		},3000);
+
+	    });
+
+
+	    //获得schedule_data表格
+	    socket.on("getScheduleData",function(data){
+		var i=1;
+		var temp=document.getElementById('schedule_data_table')
+		for(var item in data){
+		    //console.log($('#schedule_table tr:eq('+i+')'));
+		    temp.rows[i].cells[1].innerHTML=data[item];
+		    i++;
+		}
+
+	    });
+
+
+
+
+
+	    //更改schedule_data表格成功
+	    socket.on("schedule_data_update_success",function(data){
+		var key=data.key;
+		var value=data.value;
+		var selectedRow=$('#schedule_data_table').find('.selected');
+		if(selectedRow[0].cells[0].innerHTML==key) selectedRow[0].cells[1].innerHTML=value;
+
+		layer.closeAll();
+		layer.alert("修改成功！");
+	    });
+
+
+
+	    //获得系统状态
+	    socket.on('getSysStatus',function(data){
+		if(data.ifDyn){
+		    $('#dynSwitch input').bootstrapSwitch('readonly',false);
+		    $('#dynSwitch input').bootstrapSwitch('state',true);
+		    $('#dynSwitch input').bootstrapSwitch('readonly',true);
+		    $('#open_dyn').attr({'disabled':'disabled'});
+		}
+		else{
+		    $('#dynSwitch input').bootstrapSwitch('readonly',false);
+		    $('#dynSwitch input').bootstrapSwitch('state',false);
+		    $('#dynSwitch input').bootstrapSwitch('readonly',true);
+		    $('#open_dyn').removeAttr("disabled");
+		}
+		if(data.ifSchedule){
+		    $('#scheduleSwitch input').bootstrapSwitch('readonly',false);
+		    $('#scheduleSwitch input').bootstrapSwitch('state',true);
+		    $('#scheduleSwitch input').bootstrapSwitch('readonly',true);
+		    $('#open_schedule').attr({'disabled':'disabled'});
+		}
+		else{
+		    $('#scheduleSwitch input').bootstrapSwitch('readonly',false);
+		    $('#scheduleSwitch input').bootstrapSwitch('state',false);
+		    $('#scheduleSwitch input').bootstrapSwitch('readonly',true);
+		    $('#open_schedule').removeAttr("disabled");
+		}
+		if(data.ifTunnel){
+		    $('#tunnelSwitch input').bootstrapSwitch('readonly',false);
+		    $('#tunnelSwitch input').bootstrapSwitch('state',true);
+		    $('#tunnelSwitch input').bootstrapSwitch('readonly',true);
+		    $('#open_tunnel').attr({'disabled':'disabled'});
+		}
+		else{
+		    $('#tunnelSwitch input').bootstrapSwitch('readonly',false);
+		    $('#tunnelSwitch input').bootstrapSwitch('state',false);
+		    $('#tunnelSwitch input').bootstrapSwitch('readonly',true);
+		    $('#open_tunnel').removeAttr("disabled");
+		}
+		for(var item in pppObject){
+		    if(data['ifPPP'+item.substr(-1)]){
+			$('#'+item+'Switch input').bootstrapSwitch('readonly',false);
+			$('#'+item+'Switch input').bootstrapSwitch('state',true);
+			$('#'+item+'Switch input').bootstrapSwitch('readonly',true);
+		    }else{
+			$('#'+item+'Switch input').bootstrapSwitch('readonly',false);
+			$('#'+item+'Switch input').bootstrapSwitch('state',false);
+			$('#'+item+'Switch input').bootstrapSwitch('readonly',true);
+		    }
+		}
+		var cpuPercent=data.cpuPercent;
+		var memoryPercent=data.memoryPercent;
+		//console.log(cpuPercent);
+		if(cpuPercent>0&cpuPercent<100){
+		    $('#cpuGauge').highcharts().series[0].update({data:[cpuPercent]});
+		}
+		if(memoryPercent>0&memoryPercent<100){
+		    $('#memoryGauge').highcharts().series[0].update({data:[memoryPercent]});
+		}
+
+		setTimeout(function(){
+		    socket.emit('reqSysStatus');
+		},5000);
+	    });
+
+	    //更新硬盘使用率
+	    socket.on('getDiskStatus',function(data){
+		var rootPercent=data.rootPercent;
+		var bootPercent=data.bootPercent;
+		if(rootPercent>0&rootPercent<100){
+		    $('#rootGauge').highcharts().series[0].update({data:[rootPercent]});
+		}
+		if(bootPercent>0&bootPercent<100){
+		    $('#bootGauge').highcharts().series[0].update({data:[bootPercent]});
+		}
+		setTimeout(function(){
+		    socket.emit('reqDiskStatus');
+		},300000);
+	    })
+
+	    //开启动态监测成功
+	    socket.on('open_dyn_success',function(data){
+		$('#dynSwitch input').bootstrapSwitch('readonly',false);
+		$('#dynSwitch input').bootstrapSwitch('state',true);
+		$('#dynSwitch input').bootstrapSwitch('readonly',true);
+		$('#open_dyn').attr({'disabled':'disabled'});
+		layer.alert('开启网络组件成功！');
+	    });
+	    socket.on('open_schedule_success',function(data){
+		$('#scheduleSwitch input').bootstrapSwitch('readonly',false);
+		$('#scheduleSwitch input').bootstrapSwitch('state',true);
+		$('#scheduleSwitch input').bootstrapSwitch('readonly',true);
+		$('#open_schedule').attr({'disabled':'disabled'});
+		layer.alert('开启资源适配成功！');
+	    });
+	    socket.on('open_tunnel_success',function(data){
+		$('#tunnelSwitch input').bootstrapSwitch('readonly',false);
+		$('#tunnelSwitch input').bootstrapSwitch('state',true);
+		$('#tunnelSwitch input').bootstrapSwitch('readonly',true);
+		$('#open_tunnel').attr({'disabled':'disabled'});
+		layer.alert('开启智慧服务成功！');
+	    });
+
+	    //更改ppp状态成功
+	    socket.on('ppp_change_success',function(){
+		layer.alert('更改成功');
+	    });
+
+	    //更改merip成功
+	    socket.on('merip_change_success',function(){
+		layer.alert('更改成功，重启设备后配置生效');
+	    });
+
+	    //获得ssid 密码
+		socket.on('getWifi',function(data){
+		  $('#wifi_ssid').val(data.wifi_ssid);
+		  $('#wifi_code').val(data.wifi_code);
+		});
+		//更改wifi_ap成功
+		socket.on('wifi_ap_success',function(){
+		  layer.alert('成功更改为wifi状态');
+		});
+
+	}
+
+
+
+      /************************************************************页面事件********************************************************************/
+        //schedule_data改变事件
+      schedule_data_click=function(){
+        var schedule_data_form_table=document.getElementById("schedule_data_form_table");
+        /*for(var i=0;i<schedule_data_form_table.length;i++){
+         schedule_data_form_table.rows[i].cells[1].firstChild.value=
+         }*/
+        var selectedRow=$('#schedule_data_table').find('.selected');
+        if(!selectedRow.length){
+          alert('请先选择要修改的行！');
+          return;
+        }
+        schedule_data_form_table.rows[1].cells[0].innerHTML=selectedRow[0].cells[0].innerHTML;
+        schedule_data_form_table.rows[1].cells[1].firstChild.value=selectedRow.find('td:eq('+i+')').text();
+        //console.log($('#schedule_data_table').find('.selected').height());
+        layer.open({
+          type: 1,
+          title: '',
+          closeBtn: 0,
+          shadeClose: true,
+          content: $('#schedule_data_form')
+        });
+
+      };
+
+      $('#schedule_data_table tbody').on('click', 'tr', function(){
+        if ($(this).hasClass('selected') ) {
+          $(this).removeClass('selected');
+        }
+        else {
+          $('#schedule_data_table tr.selected').removeClass('selected');
+          $(this).addClass('selected');
+        }
+      });
+      //schedule_data提交事件
+      schedule_data_submit=function(){
+        var key=$('#schedule_data_form_table')[0].rows[1].cells[0].innerHTML;
+        var value=$('#schedule_data_form_table')[0].rows[1].cells[1].firstChild.value;
+        if(key.substr(0,2)!='id'){
+          if(key.substr(0,4)=='cost'){
+            value=parseFloat(value);
+          }else{
+            value=parseInt(value);
+          }
+        }
+        if(isNaN(value)){
+          alert('输入不合法');
+          return;
+        }
+        var data={'key':key,'value':value};
+        socket.emit('schedule_data_update',data);
+      }
+
+
+
+
+
+      //开启动态监测，数据调度，隧道
+      $("#open_dyn").click(function(e){
+        socket.emit('open_dyn');
+      });
+      $("#open_schedule").click(function(e){
+        socket.emit('open_schedule');
+      });
+      $("#open_tunnel").click(function(e){
+        socket.emit('open_tunnel');
+      });
+
+
+
+      //重启
+      $("#reboot").click(function(e){
+        if(socket.connected){
+          if (confirm("确认要重启？")) {
+            socket.emit('reboot_event');
+            socket.disconnect();
+            layer.msg('正在等待设备重启，请稍候', {icon: 16,time:1000000});
+            setTimeout(function(){
+              checkRebootSuc();
+            },15000);
+
+
+          }
+        }else{
+          layer.alert('请先连接设备!');
+        }
+
+      });
+      //关机
+      $('#shutdown').click(function(e){
+        if(socket.connected){
+          if(confirm("确认要关机？")){
+            socket.emit('shutdown_event');
+          }
+        }else{
+          layer.alert('请先连接设备!');
+        }
+      });
+
+
+      //pppOn/Off事件
+
+      for(var ppp in pppObject){
+       // (function(ppp){
+
+		//})(ppp);
+		document.getElementById(ppp+'On').onclick=(function(ppp){
+           return function(){ 
+            if(socket.connected){
+              var data={};
+              data['ppp']=ppp.substr(-1);
+              data['state']=true;
+              socket.emit('pppStatusChange',data);
+            }else{
+              layer.alert('请先连接设备!');
+            }
+          }
+        })(ppp);
+        document.getElementById(ppp+'Off').onclick=(function(ppp){
+          return function(){
+            if(socket.connected){
+              var data={};
+              data['ppp']=ppp.substr(-1);
+              data['state']=false;
+              socket.emit('pppStatusChange',data);
+            }else{
+              layer.alert('请先连接设备!');
+            }
+          }
+        })(ppp);
+      }
+
+
+      //merip地址更改
+      $('#merip_submit').click(function(e){
+
+        var merip = [];
+        merip.push(document.merip.T1.value);
+        merip.push('.');
+        merip.push(document.merip.T2.value);
+        merip.push('.');
+        merip.push(document.merip.T3.value);
+        merip.push('.');
+        merip.push(document.merip.T4.value);
+        merip = merip.join('');
+
+        if(isValidIP(merip)) {
+          socket.emit('merip_change',merip);
+        }
+      });
+
+      $('#rsrpShow').click(function(){
+        if($('#rsrpShow').val()==='显示RSRP'){
+          $('#rsrpShow').val('隐藏RSRP');
+          $('#rsrpBox').css('display','block');
+        }else{
+          $('#rsrpShow').val('显示RSRP');
+          $('#rsrpBox').css('display','none');
+        }
+      });
+
+      $('#rttShow').click(function(){
+        if($('#rttShow').val()==='显示RSRP'){
+          $('#rttShow').val('隐藏RSRP');
+          $('#rttBox').css('display','block');
+        }else{
+          $('#rttShow').val('显示RSRP');
+          $('#rttBox').css('display','none');
+        }
+      });
+
+      $('#lossrateShow').click(function(){
+        if($('#lossrateShow').val()==='显示RSRP'){
+          $('#lossrateShow').val('隐藏RSRP');
+          $('#lossrateBox').css('display','block');
+        }else{
+          $('#lossrateShow').val('显示RSRP');
+          $('#lossrateBox').css('display','none');
+        }
+      });
+
+      $('#wifi_submit').click(function(){
+	var wifi_data={};
+	wifi_data.ssid=$('#wifi_ssid').val();
+	wifi_data.code=$('#wifi_code').val();
+	socket.emit('wifi_change',wifi_data);
+	
+      });
+
+    });
+
+  </script>
+
+  <title>单MAR配置管理</title>
+  <style>
+    .kuang{margin:0 auto;text-align: center;margin-top:20px;padding-left:40px;padding-right:40px;}
+    #mess{text-align: center}
+    .box{margin:0 auto;text-align: center;margin-top:30px;padding-left:20px;padding-right:20px;}
+    #.value{width: 200px;height:80px;border:1px solid;text-align: center;line-height: 200px;display: inline-block;}
+    ul.affix{
+      top:80px;
+    }
+    h1{
+      font-size:25px;
+    }
+    .main-sidebar{
+      width:150px;
+    }
+
+
+  </style>
+</head>
+<body class="skin-blue sidebar-mini">
+
+
+
+<div class="wrapper">
+
+  <header class="main-header fixed">
+    <a href="#" class="logo">
+      <!-- logo for regular state and mobile devices -->
+      <span class="logo-lg"><b>设备</b>配置界面</span>
+    </a>
+    <nav class="navbar navbar-static-top">
+      <div class="navbar-custom-menu">
+        <ul class="nav navbar-nav">
+          <li>
+            <a href="#" id="shutdown">关机</a>
+          </li>
+          <li>
+            <a href="#" id="reboot">重启</a>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+
+  <aside class='main-sidebar'>
+    <section class='sidebar'>
+      <ul class='sidebar-menu affix'>
+
+        <li class="active">
+          <a href="#">收发速率</a>
+        </li>
+
+          <li>
+              <a href="#merip">地面地址</a>
+          </li>
+          <li>
+              <a href="#dyn">网络组件</a>
+          </li>
+          <li>
+              <a href="#schedule">资源适配</a>
+          </li>
+          <li>
+              <a href="#status">系统状态</a>
+          </li>
+          <li>
+              <a href="#wifi">wifi配置</a>
+          </li>
+      </ul>
+
+    </section>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content">
+      <div class="kuang">
+
+        <div class="box" id='rate'>
+          <div id="container0">发送速率</div>
+          <input type="button" id="rsrpShow" value="隐藏RSRP"/>
+          <input type="button" id="rttShow" value="隐藏RTT"/>
+          <input type="button" id="lossrateShow" value="隐藏Lossrate"/>
+        </div>
+        <div class='box' id="rsrpBox" style="display:none">
+          <div id="container2">RSRP</div>
+        </div>
+        <div class="box" id="rttBox" style="display:none">
+          <div id="container3">RTT</div>
+        </div>
+        <div class="box" id="lossrateBox" style="display:none">
+          <div id="container4">丢包率</div>
+        </div>
+        <div class='box'>
+          <div id="container1">接收速率</div>
+        </div>
+
+
+
+
+        <div class="box" id="merip"><br>
+          <div><h1>地面设备地址配置</h1></div><br>
+          <form method="POST" name="merip" action>
+            IP地址：
+            <input type="text" name="T1" size="4" maxlength="4" LANGUAGE="javascript" onkeyup="return merip_T1_onkeyup()">.
+            <input type="text" name="T2" size="4" maxlength="4" LANGUAGE="javascript" onkeyup="return merip_T2_onkeyup()">.
+            <input type="text" name="T3" size="4" maxlength="4" LANGUAGE="javascript" onkeyup="return merip_T3_onkeyup()">.
+            <input type="text" name="T4" size="4" maxlength="4">  <button type="button" id="merip_submit">确定</button></br>
+          </form>
+        </div>
+
+
+
+
+        <div class="box" id="dyn"><br>
+          <div><h1>网络组件</h1></div>
+	  <%var pppObject={'ppp0':'电信','ppp2':'联通','ppp4':'移动'};%>
+          <%for(var ppp in pppObject){%>
+          <small><%= pppObject[ppp] %></small>
+          <table id='pppLink<%= ppp.substr(-1) %>' class='display'>
+            <thead>
+            <tr><th>id</th><th>ifname</th><th>status</th><th>rsrp</th><th>raterecv</th><th>ratesend</th><th>PSRAT</th></tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+          <%}%>
+        </div><!--end box-->
+
+        <div class="box"  id="schedule"><br>
+
+          <div><h1>资源适配</h1></div>
+
+          <input type="button" value="修改" onclick="schedule_data_click()" style='float:right'/>
+          <table id="schedule_data_table" align="center" class="display">
+            <thead>
+            <tr><th>字段</th><th>当前值</th></tr>
+            </thead>
+            <tbody>
+
+            </tbody>
+          </table>
+          <br>
+        </div><!--end box-->
+
+
+        <!--弹出表单schedule_data-->
+        <div id="schedule_data_form" style="display:none">
+          <table id="schedule_data_form_table">
+            <tr><td>字段</td><td>值</td></tr>
+            <tr><td></td><td><input type="text"/></td></tr>
+          </table>
+          <input type="button" value="提交" onclick="schedule_data_submit()"/>
+        </div>
+
+
+
+
+
+
+        <div class="box"  id="status" ><br/><br/>
+
+          <div><h1>系统状态</h1></div><br/><br/>
+
+          <div style="display:none">
+            <small>网络组件</small>
+            <div class="switch" id='dynSwitch'  style="display:inline">
+              <input type="checkbox" checked/>
+            </div>
+            <button type="button" id="open_dyn"  style="display:inline">开启网络组件</button>
+          </div>
+
+          <div style="display:none">
+            <small>资源适配</small>
+            <div class="switch" id='scheduleSwitch'  style="display:inline">
+              <input type="checkbox" checked/>
+            </div>
+            <button type="button" id="open_schedule"  style="display:inline">开启资源适配</button>
+          </div>
+
+          <div style="display:none">
+            <small>智慧服务</small>
+            <div class="switch" id='tunnelSwitch'  style="display:inline">
+              <input type="checkbox" checked/>
+            </div>
+            <button type="button" id="open_tunnel"  style="display:inline">开启智慧服务</button>
+          </div>
+          <br>
+
+
+	      <%for(var ppp in pppObject){%>
+          <div>
+            <small><%= pppObject[ppp] %></small>
+            <div id='ppp<%= ppp.substr(-1) %>Switch' style="display:inline">
+              <input type='checkbox' checked/>
+            </div>
+            <button id='ppp<%= ppp.substr(-1) %>On' style="display:none">开启</button>
+            <button id='ppp<%= ppp.substr(-1) %>Off' style="display:none">关闭</button>
+          </div>
+          <%}%>
+
+
+          <br>
+          <div class='row'>
+            <div id='cpuGauge' class="col-sm-6 col-lg-6"></div>
+            <div id='memoryGauge' class="col-sm-6 col-lg-6"></div>
+            <div id='rootGauge' class="col-sm-6 col-lg-6"></div>
+            <div id='bootGauge' class="col-sm-6 col-lg-6"></div>
+          </div>
+
+        </div><!--end box-->
+
+	<div class="box" id="wifi">
+		<div><h1>wifi配置</h1></div><br>
+		<label>SSID:</label><input type="text" id="wifi_ssid" length="20">
+		<label>密码:</label><input type="text" id="wifi_code" length="20"><br>
+		<input type="button" id="wifi_submit" value="修改">
+	</div>
+
+
+
+
+      </div><!--end kuang-->
+    </section>
+  </div><!--end content-wrapper-->
+</div><!--end wrapper-->
+
+
+
+
+
+
+
+
+</body>
+</html>
